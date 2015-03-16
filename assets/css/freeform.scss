@@ -1,0 +1,57 @@
+.freeform-form {
+	
+	label {
+		display: block;
+		font-weight: bold;
+	}
+
+	.freeform-field {
+		display: block;
+		padding: 10px 0;
+
+		&.required {
+			color: inherit;
+		}
+
+		.field-row {
+			display: flex;
+
+			.field-col {
+				margin-right: 3%;
+
+				&:last-of-type {
+					margin-right: 0;
+				}
+
+			}	
+
+		}
+
+		.sub-label {
+			font-size: 14px;
+			color: inherit;
+		}
+
+		.asterisk {
+			color: red;
+		}
+
+		input,
+		select,
+		textarea {
+			width: 100%;
+		}
+
+		&.error {
+
+			input,
+			select,
+			textarea {
+				border-color: red;
+			}
+
+		}
+
+	}
+
+}

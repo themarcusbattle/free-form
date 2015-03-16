@@ -1,0 +1,29 @@
+.freeform-form label {
+  display: block;
+  font-weight: bold; }
+.freeform-form .freeform-field {
+  display: block;
+  padding: 10px 0; }
+  .freeform-form .freeform-field.required {
+    color: inherit; }
+  .freeform-form .freeform-field .field-row {
+    display: flex; }
+    .freeform-form .freeform-field .field-row .field-col {
+      margin-right: 3%; }
+      .freeform-form .freeform-field .field-row .field-col:last-of-type {
+        margin-right: 0; }
+  .freeform-form .freeform-field .sub-label {
+    font-size: 14px;
+    color: inherit; }
+  .freeform-form .freeform-field .asterisk {
+    color: red; }
+  .freeform-form .freeform-field input,
+  .freeform-form .freeform-field select,
+  .freeform-form .freeform-field textarea {
+    width: 100%; }
+  .freeform-form .freeform-field.error input,
+  .freeform-form .freeform-field.error select,
+  .freeform-form .freeform-field.error textarea {
+    border-color: red; }
+
+/*# sourceMappingURL=freeform.css.map */
