@@ -17,25 +17,36 @@ class Free_Form {
 		
 		require_once plugin_dir_path( __FILE__ ) . "includes/CMB2/init.php";
 
+		// Custom Post Types for Forms & Entries
 		add_action( 'init', array( $this, 'create_form_post_type' ) );
 		add_action( 'init', array( $this, 'create_entry_post_type' ) );
-		add_filter( 'cmb2_meta_boxes', array( $this, 'cmb2_form_fields' ) );
-		add_filter( 'cmb2_meta_boxes', array( $this, 'cmb2_entry' ) );
-		add_action( 'cmb2_render_primary_email', array( $this, 'cmb2_render_primary_email' ), 10, 5 );
 
-		add_filter( 'the_content', array( $this, 'display_form' ) );
+		// CMB2 Metabox support for Credit Cards
+		add_filter( 'cmb2_meta_boxes', array( $this, 'cmb2_form_fields' ), 10 );
+		add_filter( 'cmb2_meta_boxes', array( $this, 'cmb2_entry' ), 10 );
+		add_action( 'cmb2_render_primary_email', array( $this, 'cmb2_render_primary_email' ), 10, 5 );
+		add_action( 'cmb2_render_field_type_select', array( $this, 'cmb2_render_field_type_select' ), 10, 5 );
+		add_filter( 'cmb2_sanitize_field_type_select', array( $this, 'cmb2_sanitize_field_type_select' ), 10, 2 );
+
+		add_filter( 'the_content', array( $this, 'display_form' ), 10 );
 		add_filter( 'freeform_fields', array( $this, 'get_form_fields' ), 10, 2 );
 		add_filter( 'freeform_form', array( $this, 'render_form' ), 10, 1 );
+		add_shortcode( 'freeform', array( $this, 'freeform_shortcode' ) );
 
 		add_action( 'wp_enqueue_scripts', array( $this, 'load_styles_and_scripts' ) );
+		add_action( 'admin_enqueue_scripts', array( $this, 'admin_load_styles_and_scripts' ) );
 		add_action( 'init', array( $this, 'submit_freeform' ) );
 
 		// Entries
 		add_filter( 'manage_entry_posts_columns', array( $this, 'entry_columns' ) );
 		add_action( 'manage_entry_posts_custom_column' , array( $this, 'entry_column_data' ), 10, 2 );
 
-		// Ajax
+		// Ajax Support
 		add_action( 'wp_ajax_submit_freeform', array( $this, 'submit_freeform' ) );
+		
+		// WP Actions
+		add_action( 'after_submit_freeform_create_user', array( $this, 'create_user' ), 10, 2 );
+		add_action( 'after_submit_freeform_login_user', array( $this, 'login_user' ), 10, 2 );
 
 	}
 
@@ -54,6 +65,13 @@ class Free_Form {
             	'ajax_url' => admin_url( 'admin-ajax.php' )
             )
         );
+
+	}
+
+	public function admin_load_styles_and_scripts() {
+
+		wp_enqueue_style( 'font-awesome', '//maxcdn.bootstrapcdn.com/font-awesome/4.3.0/css/font-awesome.min.css' );
+		wp_enqueue_script( 'freeform', plugin_dir_url( __FILE__ ) . '/assets/js/freeform.admin.js' , array('jquery'), '0.1.0', true );
 
 	}
 
@@ -135,7 +153,7 @@ class Free_Form {
 
 	public function cmb2_form_fields( $meta_boxes = array() ) {
 		
-		$prefix = '_freeform_';
+		$prefix = 'freeform_';
 		
 		$meta_boxes['settings'] = array(
 			'id'            => 'settings',
@@ -144,6 +162,17 @@ class Free_Form {
 			'context'       => 'normal',
 			'priority'      => 'high',
 			'fields'        => array(
+				array(
+					'name' => __( 'Redirect Behavior', 'freeform' ),
+					'id'   => $prefix . 'redirect_action',
+					'type' => 'select',
+					'options' => array(
+						'' => 'None',
+						'redirect_to_page' => __( 'Redirect to Page/Post', 'freeform' ),
+						'redirect_to_url' => __( 'Redirect to URL', 'freeform' ),
+						'refresh' => __( 'Refresh', 'freeform' )
+					)
+				),
 				array(
 					'name' => __( 'Confirmation Message', 'freeform' ),
 					'id'   => $prefix . 'confirmation_message',
@@ -156,11 +185,7 @@ class Free_Form {
 					'type'    => 'wysiwyg',
 					'options' => array( 'textarea_rows' => 4, )
 				),
-				/* array(
-					'name' => __( 'Send Copy To', 'freeform' ),
-					'id'   => $prefix . 'recipient',
-					'type' => 'text',
-				),
+				/* s
 				array(
 					'name' => __( 'Who can see this form?', 'freeform' ),
 					'id'   => $prefix . 'visibility',
@@ -170,8 +195,8 @@ class Free_Form {
 					)
 				), */
 				array(
-					'name' => __( 'Primary E-mail Field', 'freeform' ),
-					'id'   => $prefix . 'primary_email',
+					'name' => __( 'Send Copy To', 'freeform' ),
+					'id'   => $prefix . 'email_copy_to',
 					'type' => 'primary_email',
 					'required' => true,
 					'options' => array(
@@ -179,8 +204,59 @@ class Free_Form {
 					),
 					'desc' => __( 'Create and select an email field so the user can get a copy of their submission', 'freeform' ),
 				),
+				array(
+					'name' => __( 'WP Action', 'freeform' ),
+					'desc' => __( 'Your form can perform a WordPress based action on submit', 'freeform' ),
+					'id'   => $prefix . 'wp_action',
+					'type' => 'select',
+					'options' => array(
+						'' => '--',
+						'create_user' => __( 'Create User', 'freeform' ),
+						'login_user' => __( 'Login User', 'freeform' )
+					)
+				),
+				array(
+					'name' => __( 'Custom Action', 'freeform' ),
+					'desc' => __( 'Your form can perform a custom action based action on submit', 'freeform' ),
+					'id'   => $prefix . 'custom_action',
+					'type' => 'select',
+					'options' => apply_filters('freeform_custom_actions', array( '' => '--' ) )
+				),
 			)
 		); 
+		
+		$form_fields = apply_filters( 'freeform_form_fields', array( 
+			array(
+				'name' => 'Label',
+				'id'   => 'label',
+				'type' => 'text',
+				'required' => true
+				// 'repeatable' => true, // Repeatable fields are supported w/in repeatable groups (for most types)
+			),
+			array(
+				'name' => __( 'Required?', 'freeform' ),
+				'id'   => 'required',
+				'type' => 'checkbox',
+			),
+			array(
+				'name' => 'Field Type',
+				'id'   => 'field',
+				'type'    => 'select',
+				'options' => apply_filters( 'freeform_field_types', array(
+					''				=> '--',
+					'date' 			=> __( 'Date', 'freeform' ),
+					'select' 		=> __( 'Dropdown', 'freeform' ),
+					'email' 		=> __( 'Email', 'freeform' ),
+					'name'   		=> __( 'Name', 'freeform' ),
+					'textarea'  	=> __( 'Paragraph', 'freeform' ),
+					'password'   	=> __( 'Password', 'freeform' ),
+					'phone_number'  => __( 'Phone Number', 'freeform' ),
+					'text' 			=> __( 'Text', 'freeform' ),
+					'text_time'   	=> __( 'Time', 'freeform' ),
+
+				)),
+			),
+		) );
 
 		$meta_boxes['form_fields'] = array(
 			'id'           => 'form_fields',
@@ -190,7 +266,6 @@ class Free_Form {
 				array(
 					'id'          => $prefix . 'form_fields',
 					'type'        => 'group',
-					// 'description' => __( 'Generates reusable form entries', 'freeform' ),
 					'options'     => array(
 						'group_title'   => __( 'Question {#}', 'freeform' ), // {#} gets replaced by row number
 						'add_button'    => __( 'Add Another Field', 'freeform' ),
@@ -198,35 +273,7 @@ class Free_Form {
 						'sortable'      => true, // beta
 					),
 					// Fields array works the same, except id's only need to be unique for this group. Prefix is not needed.
-					'fields'      => array(
-						array(
-							'name' => 'Label',
-							'id'   => 'label',
-							'type' => 'text',
-							'required' => true
-							// 'repeatable' => true, // Repeatable fields are supported w/in repeatable groups (for most types)
-						),
-						array(
-							'name' => 'Input Type',
-							// 'description' => 'Write a short description for this entry',
-							'id'   => 'input_type',
-							'type'    => 'select',
-							'options' => array(
-								'date'   => __( 'Date', 'freeform' ),
-								'email' => __( 'Email', 'freeform' ),
-								'name'   => __( 'Name', 'freeform' ),
-								'textarea'   => __( 'Paragraph', 'freeform' ),
-								'phone_number'   => __( 'Phone Number', 'freeform' ),
-								'text' => __( 'Text', 'freeform' ),
-								'text_time'   => __( 'Time', 'freeform' ),
-							),
-						),
-						array(
-							'name' => __( 'Required?', 'freeform' ),
-							'id'   => 'required',
-							'type' => 'checkbox',
-						),
-					),
+					'fields'      => $form_fields,
 				),
 			),
 		);
@@ -237,7 +284,7 @@ class Free_Form {
 
 	public function cmb2_entry( $meta_boxes = array() ) {
 		
-		$prefix = '_freeform_entry';
+		$prefix = 'freeform_entry';
 		
 		$meta_boxes['entry'] = array(
 			'id'            => 'entry',
@@ -249,8 +296,7 @@ class Free_Form {
 				array(
 					'name' => __( 'Form ID', 'freeform' ),
 					'id'   => 'form_id',
-					'type' => 'text',
-					'show_on_cb' => 'cmb2_display_form_ID'
+					'type' => 'text'
 				),
 			)
 		); 
@@ -259,15 +305,9 @@ class Free_Form {
 
 	}
 
-	public function cmb2_display_form_ID( $field ) {
-		print_r( $field );
-	}
-
 	public function display_form( $content ) {
 
-		$form_fields = apply_filters( 'freeform_fields', get_the_ID(), array() );
-
-		$form = apply_filters( 'freeform_form', $form_fields );
+		$form = apply_filters( 'freeform_form', get_the_ID() );
 
 		return $content . $form;
 
@@ -275,15 +315,19 @@ class Free_Form {
 
 	public function get_form_fields( $form_id, $form_fields ) {
 		
-		$form_fields = get_post_meta( $form_id, '_freeform_form_fields', true );
+		$form_fields = get_post_meta( $form_id, 'freeform_form_fields', true );
 
 		return $form_fields;
 
 	}
 
-	public function render_form( $form_fields = array() ) {
+	public function render_form( $form_id = 0 ) {
 
-		$form_id = get_the_ID();
+		if ( ! $form_id ) {
+			return "Please specify which form you want to learn";
+		}
+
+		$form_fields = apply_filters( 'freeform_fields', $form_id, array() );
 
 		$form  = '<p>Fields marked with (<span class="asterisk">*</span>) are mandatory.</p>';
 		$form .= '<form class="freeform-form" method="POST">';
@@ -294,11 +338,11 @@ class Free_Form {
 		foreach ( $form_fields as $field ) {
 
 			$label = isset( $field['label'] ) ? $field['label'] : '';
-			$input_type = isset( $field['input_type'] ) ? $field['input_type'] : '';
+			$field = isset( $field['field'] ) ? $field['field'] : '';
 			$is_required = isset( $field['required'] ) && ! empty( $field['required'] ) ? 'required' : '';
 			
 			$label = $this->render_label( $label, $is_required );
-			$input = $this->render_input( $input_type, $label );
+			$input = $this->render_input( $field, $label, $form_id );
 			
 			$form .= "<div class=\"freeform-field $is_required\">{$label}{$input}</div>";
 
@@ -319,13 +363,12 @@ class Free_Form {
 
 	}
 
-	public function render_input( $input, $label ) {
+	public function render_input( $input, $label, $form_id ) {
 
 		$input_name = str_replace( '-', '_', sanitize_title_with_dashes( $label ) );
 
 		switch ( $input ) {
 			
-
 			case 'email':
 				$input = "<input type=\"email\" name=\"$input_name\" />";
 				break;
@@ -346,6 +389,17 @@ class Free_Form {
 				$input = "<input type=\"text\" class=\"phone\" name=\"$input_name\" />";
 				break;
 
+			case 'password':
+				$input = "<input type=\"password\" name=\"$input_name\" />";
+				break;
+
+			case 'select':
+				$input = "
+					<select>
+						<option>One</option>
+					</select>";
+				break;
+
 			case 'name':
 				$input = "
 					<div class=\"field-row\">
@@ -362,7 +416,7 @@ class Free_Form {
 				break;
 
 			default:
-				# code...
+				$input = apply_filters( "freeform_render_{$input_name}_field", $input, $input_name, $label, $form_id );
 				break;
 		}
 		
@@ -389,11 +443,15 @@ class Free_Form {
 				// redirect with error message
 			}
 
-			$confirmation_message = get_post_meta( $form_id, '_freeform_confirmation_message', true ); 
+			$confirmation_message = get_post_meta( $form_id, 'freeform_confirmation_message', true ); 
 			$confirmation_message = ! empty( $confirmation_message ) ? $confirmation_message : 'Your form has been submitted!';
 
-			$primary_email_field = get_post_meta( $form_id, '_freeform_primary_email', true ); 
+			$primary_email_field = get_post_meta( $form_id, 'freeform_primary_email', true ); 
 			$primary_email = isset( $_POST[ $primary_email_field ] ) ? $_POST[ $primary_email_field ] : '';
+
+			$wp_action = get_post_meta( $form_id, 'freeform_wp_action', true );
+			$custom_action = get_post_meta( $form_id, 'freeform_custom_action', true );
+			$redirect_action = get_post_meta( $form_id, 'freeform_redirect_action', true );
 
 			if ( $primary_email ) {
 				mail( $primary_email, $form->post_title, $confirmation_message );
@@ -417,13 +475,21 @@ class Free_Form {
 				// redirect with error message
 			} else {
 
+				do_action( "after_submit_freeform_{$wp_action}", $form_id, $_POST );
+				do_action( "after_submit_freeform_{$custom_action}", $form_id, $_POST );
+
 				update_post_meta( $entry_id, 'form_id', $form_id );
 				update_post_meta( $entry_id, 'form_data', $_POST );
 				
 				// redirect with success message
 				if ( $use_ajax ) {
 				
-					echo json_encode( array( 'success' => true, 'message' => $confirmation_message ) );
+					echo json_encode( array( 
+						'success' => true, 
+						'message' => $confirmation_message,
+						'redirect_action' => $redirect_action
+					) );
+
 					exit;
 
 				}
@@ -467,10 +533,8 @@ class Free_Form {
 	}
 
 	public function cmb2_render_primary_email( $field, $escaped_value, $object_id, $object_type, $field_type_object ) {
-		
-		$field->args['options'];
 
-		$fields = get_post_meta( $object_id, '_freeform_form_fields', true );
+		$fields = get_post_meta( $object_id, 'freeform_form_fields', true );
 
 		if ( $fields ) {
 
@@ -480,7 +544,7 @@ class Free_Form {
 
 			foreach ( $fields as $key => $value ) {
 				
-				if ( $value['input_type'] == 'email' ) {
+				if ( $value['field']['type'] == 'email' ) {
 
 					$input_name = str_replace( '-', '_', sanitize_title_with_dashes( $value['label'] ) );
 					$field->args['options'][ $input_name ] = $value['label'];
@@ -494,6 +558,65 @@ class Free_Form {
 		echo $field_type_object->select();
 
 	}
+
+	public function cmb2_render_field_type_select( $field, $escaped_value, $object_id, $object_type, $field_type_object ) {
+
+		// make sure we specify each part of the value we need.
+	    $value = wp_parse_args( $escaped_value, array(
+	        'type' => '',
+	        'settings' => '',
+	    ) );
+	    
+	    $type_options = '';
+
+	    // Select the proper field type and prepare select options
+	    foreach( $field->args['options'] as $field_type => $field_type_label ) {
+	    	$type_options .= '<option value="'. $field_type .'" '. selected( $value['type'], $field_type, false ) .'>'. $field_type_label .'</option>';
+	    }
+
+	    // Output the field type object
+		echo $field_type_object->select( array(
+			'name'  => $field_type_object->_name('[type]'),
+			'id'    => $field_type_object->_id( '_type' ),
+			'options' => $type_options
+		) );
+
+		switch ( $value['type'] ) {
+
+			case 'select':
+				
+				echo '<div><p><label for="' . $field_type_object->_id('_values') . '">Dropdown Options</label></p>';
+
+				echo $field_type_object->textarea( array(
+					'class' => 'cmb2-textarea-small', 
+					'rows'  => 4,
+					'name'  => $field_type_object->_name('[values]'),
+					'id'    => $field_type_object->_id( '_values' ),
+					'value' => $value['values'],
+					'desc'  => '<p class=\"cmb2-metabox-description\">Enter your choices one per line</p>'
+				) );
+
+				echo '</div>';
+
+				break;
+			
+			default:
+				
+				echo apply_filters( 'freeform_field_type_select_values', $field_type_object, $value );
+
+				break;
+
+		}
+
+	}
+
+	/**
+	 * Prevents the field type values from being formatted when certain types are selected
+	 */
+	public function cmb2_sanitize_field_type_select( $override_value, $value ) {
+
+
+	}	
 
 	public function get_form_by_entry( $entry_id ) {
 
@@ -512,6 +635,53 @@ class Free_Form {
 	public function get_form_by_id( $form_id ) {
 		return get_post( $form_id, OBJECT );
 	}
+
+	public function freeform_shortcode( $atts ) {
+		
+		$options = shortcode_atts( array(
+		    'form' => '',
+		    'id' => 0,
+		), $atts );
+
+		if ( $options['form'] ) {
+			$form = get_page_by_title( $options['form'], OBJECT, 'form' );
+		}
+
+		if ( $form ) {
+			return $this->render_form( $form->ID );
+		}
+
+	}
+
+	public function create_user( $form_id, $form_data ) {
+		echo "created that user!"; exit;
+	}
+
+	public function login_user( $form_id, $form_data ) {
+		
+		$username = '';
+		$password = isset( $form_data['password'] ) ? $form_data['password'] : '';
+
+		if ( isset( $form_data['email'] ) ) {
+			
+			$wp_user = get_user_by( 'email', $form_data['email'] );
+			$username = isset( $wp_user->user_login ) ? $wp_user->user_login : '';
+
+		}
+
+		if ( $username ) {
+
+			$creds = array();
+			$creds['user_login'] = $username;
+		    $creds['user_password'] = $password;
+		    $creds['remember'] = true;
+
+		    $user = wp_signon( $creds, false );
+
+		}
+
+	}
+
 }
 
 $FreeForm = new Free_Form();

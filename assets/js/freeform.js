@@ -1,5 +1,5 @@
 jQuery(document).ready(function($){
-	
+
 	$('.freeform-form button[type="submit"]').on( 'click', function( form_submit ) {
 
 		form_submit.preventDefault();
@@ -8,9 +8,16 @@ jQuery(document).ready(function($){
 		var form_is_valid = validate_form();
 		var submit_button = $(this);
 
-		if ( form_is_valid ) {
+		var trigger = $.event.trigger({
+			type:    "freeform_submit",
+			message: "freeform submit button was pressed",
+			time:    new Date(),
+			form:    form
+		});
 
-			$( submit_button ).attr( 'disabled', true );
+		if ( form_is_valid && ( trigger !== false ) ) {	
+
+			// $( submit_button ).attr( 'disabled', true );
 
 			request = $.ajax({
 				url: freeform.ajax_url,
@@ -23,7 +30,15 @@ jQuery(document).ready(function($){
 				
 				$( submit_button ).removeAttr( 'disabled' );
 				
-				alert( response.message );
+				if ( response.success ) {
+
+					if ( response.redirect_action == 'refresh' ) {
+						location.reload();
+					}
+
+				} else {
+					alert( response.message );
+				}
 				
 			});
 
