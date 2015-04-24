@@ -307,6 +307,10 @@ class Free_Form {
 
 	public function display_form( $content ) {
 
+		if ( get_post_type() !== 'form' ) {
+			return $content;
+		}
+
 		$form = apply_filters( 'freeform_form', get_the_ID() );
 
 		return $content . $form;
@@ -322,35 +326,39 @@ class Free_Form {
 	}
 
 	public function render_form( $form_id = 0 ) {
-
+		
 		if ( ! $form_id ) {
 			return "Please specify which form you want to learn";
 		}
 
 		$form_fields = apply_filters( 'freeform_fields', $form_id, array() );
-
-		$form  = '<p>Fields marked with (<span class="asterisk">*</span>) are mandatory.</p>';
-		$form .= '<form class="freeform-form" method="POST">';
-		$form .= '<input type="hidden" name="action" value="submit_freeform" />';
-		$form .= '<input type="hidden" name="form_id" value="' . $form_id . '" />';
-		$form .= '<input type="hidden" name="use_ajax" value="true" />';
-
-		foreach ( $form_fields as $field ) {
-
-			$label = isset( $field['label'] ) ? $field['label'] : '';
-			$field = isset( $field['field'] ) ? $field['field'] : '';
-			$is_required = isset( $field['required'] ) && ! empty( $field['required'] ) ? 'required' : '';
-			
-			$label = $this->render_label( $label, $is_required );
-			$input = $this->render_input( $field, $label, $form_id );
-			
-			$form .= "<div class=\"freeform-field $is_required\">{$label}{$input}</div>";
-
-		} 
-
-		$form .= '<button type="submit">Submit</button>';
-		$form .= '</form>';
 		
+		if ( $form_fields ) {
+
+			$form  = '<p>Fields marked with (<span class="asterisk">*</span>) are mandatory.</p>';
+			$form .= '<form class="freeform-form" method="POST">';
+			$form .= '<input type="hidden" name="action" value="submit_freeform" />';
+			$form .= '<input type="hidden" name="form_id" value="' . $form_id . '" />';
+			$form .= '<input type="hidden" name="use_ajax" value="true" />';
+
+			foreach ( $form_fields as $field ) {
+
+				$label = isset( $field['label'] ) ? $field['label'] : '';
+				$field = isset( $field['field'] ) ? $field['field'] : '';
+				$is_required = isset( $field['required'] ) && ! empty( $field['required'] ) ? 'required' : '';
+				
+				$label = $this->render_label( $label, $is_required );
+				$input = $this->render_input( $field, $label, $form_id );
+				
+				$form .= "<div class=\"freeform-field $is_required\">{$label}{$input}</div>";
+
+			} 
+
+			$form .= '<button type="submit">Submit</button>';
+			$form .= '</form>';
+		
+		}
+
 		return $form;
 
 	}

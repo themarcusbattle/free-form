@@ -32,6 +32,8 @@ jQuery(document).ready(function($){
 				
 				if ( response.success ) {
 
+					alert( response.message );
+					
 					if ( response.redirect_action == 'refresh' ) {
 						location.reload();
 					}
